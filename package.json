@@ -13,7 +13,8 @@
     "body-parser": "^1.20.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "mongoose": "^8.4.4",
+    "faker": "^6.6.6",
+    "mongoose": "^8.5.0",
     "morgan": "^1.10.0",
     "nodemon": "^3.1.4"
   }

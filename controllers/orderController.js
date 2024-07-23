@@ -36,13 +36,19 @@ exports.getOrderById = async (req, res) => {
 };
 
 // Adicionar pedido
+/* 
+1.Percorre os itens do pedido
+2.Verifica se há estoque suficiente para cada item
+3.Calcula o preço total do pedido
+4.Cria um novo pedido com os itens, endereço, status, preço total e usuário
+5.Se o pedido estiver finalizado, registra os movimentos de saída no estoque
+6.Adiciona informações na tabela de compras para os produtos que precisem ser comprados e a qtd necessaria */
 
 exports.addOrder = async (req, res) => {
     try {
         const orderItems = req.body.orderItems;
         const orderItemsIds = [];
-        const movements = []; // Para armazenar movimentos de estoque
-        const purchases = []; // Para armazenar compras necessárias
+        const purchases = []; // Para armazenar compras necessárias : array com o id do produto e a qtd a comprar
 
         // Verificar se há produtos suficientes em estoque e calcular o preço total
         const totalPrices = await Promise.all(orderItems.map(async (orderItem) => {
@@ -62,11 +68,8 @@ exports.addOrder = async (req, res) => {
                     product: product._id,
                     quantityToBuy: quantityToBuy
                 });
-                // Atualizar o preço total para refletir apenas o que está disponível em estoque
-                totalPrice = product.price * product.countInStock;
             }
-
-            //se ha estoque suficiente:
+            //aramzena os itens do pedido num array com seus respectivos IDs de produto e quantidades 
             orderItemsIds.push({
                 product: product._id,
                 quantity: orderItem.quantity
@@ -96,7 +99,7 @@ exports.addOrder = async (req, res) => {
         }
 
         // Registrar movimentos de saída para produtos no estoque
-        if (status === 'Finalizado') {
+        if (status === 'Finalizado') {//Se o pedido estiver finalizado, registra os movimentos de saída no estoque
             await Promise.all(orderItems.map(async (orderItem) => {
                 const movement = new Movement({
                     product: orderItem.product,
@@ -113,22 +116,22 @@ exports.addOrder = async (req, res) => {
                     if (productToUpdate.countInStock >= orderItem.quantity) {
                         productToUpdate.countInStock -= orderItem.quantity;
                     } else {
-                        productToUpdate.countInStock = 0;
+                        productToUpdate.countInStock = 0;//soluçao pro estoque nao ficar negativo
                     }
                     await productToUpdate.save();
                 }
             }));
         }
         // Adicionar à tabela de compras
-        await Promise.all(purchases.map(async (purchase) => {
+        await Promise.all(purchases.map(async (purchase) => {//percorre as compras
             const existingPurchase = await Purchase.findOne({ product: purchase.product });
 
             if (existingPurchase) {
-                // Se já existe uma necessidade de compra para este produto, atualize a quantidade necessária
+                // Se já existe uma necessidade de compra para este produto especifico, atualiza a quantidade necessária
                 existingPurchase.quantityToBuy += purchase.quantityToBuy;
                 await existingPurchase.save();
             } else {
-                // Caso contrário, crie uma nova entrada na tabela de compras
+                // Caso contrário, cria uma nova entrada na tabela de compras
                 const newPurchase = new Purchase({
                     product: purchase.product,
                     quantityToBuy: purchase.quantityToBuy
@@ -136,57 +139,19 @@ exports.addOrder = async (req, res) => {
                 await newPurchase.save();
             }
         }));
-
-
         res.status(201).send(order);
     } catch (error) {
         res.status(500).send('Erro ao criar o pedido: ' + error.message);
     }
 };
 
-
-
-/* exports.addOrder = async (req, res) => {
-    try {
-    const orderItemsIds = await Promise.all(req.body.orderItems.map(async orderItem => {
-        let newOrderItem = new OrderItem({
-            quantity: orderItem.quantity,
-            product: orderItem.product
-        });
-        newOrderItem = await newOrderItem.save();
-        return newOrderItem._id;
-    }));
-
-    const totalPrices = await Promise.all(orderItemsIds.map(async (orderItemId) => {
-        const orderItem = await OrderItem.findById(orderItemId).populate('product', 'price');
-        const totalPrice = orderItem.product.price * orderItem.quantity;
-        return totalPrice;
-    }));
-
-    const totalPrice = totalPrices.reduce((a, b) => a + b, 0);
-
-    let order = new Order({
-        orderItems: orderItemsIds,
-        shippingAddress: req.body.shippingAddress,
-        status: req.body.status,
-        totalPrice: totalPrice,
-        user: req.body.user,
-    });
-
-    order = await order.save();
-    res.status(201).json(order);
-} catch (error) {
-    res.status(500).json({ message: "Erro ao criar pedido", error: error.message });
-}
-}; */
-
-// Atualizar status do pedido
+//atualizar status do pedido
 exports.updateOrder = async (req, res) => {
     try {
         const order = await Order.findByIdAndUpdate(
             req.params.id,
             { status: req.body.status },
-            { new: true }
+            { new: true } // retorna o documento atualizado em vez do documento original
         );
 
         if (!order) {
